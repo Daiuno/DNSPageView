@@ -40,7 +40,7 @@ public class PageContentViewCell: UICollectionViewCell, ScaleTransformView {
         minScale: 0.95,
         maxScale: 1,
         scaleRatio: 0.40,
-        translationRatio: .init(x: 0.92, y: 0.20),
+        translationRatio: .init(x: 0.95, y: 0.20),
         minTranslationRatio: .init(x: -5.00, y: -5.00),
         maxTranslationRatio: .init(x: 2.00, y: 0.00),
         keepVerticalSpacingEqual: true,
@@ -73,8 +73,6 @@ public class PageContentView: UIView {
 
     public weak var eventHandler: PageEventHandleable?
     
-    public var getContentEdgeInsets: (()->UIEdgeInsets)? = nil
-    
     private (set) public var style: PageStyle = PageStyle() {
         didSet {
             collectionView.semanticContentAttribute = style.isRTL ? .forceRightToLeft : .forceLeftToRight
@@ -96,11 +94,6 @@ public class PageContentView: UIView {
     private var isForbidDelegate: Bool = false
     
     private (set) public lazy var collectionView: UICollectionView = {
-//        let layout = PageCollectionViewFlowLayout()
-//        layout.minimumLineSpacing = 0
-//        layout.minimumInteritemSpacing = 0
-//        layout.scrollDirection = .horizontal
-        
         let collectionView = UICollectionView(frame: .zero, collectionViewLayout: CollectionViewPagingLayout())
         collectionView.showsHorizontalScrollIndicator = false
         collectionView.isPagingEnabled = true
@@ -108,6 +101,7 @@ public class PageContentView: UIView {
         collectionView.dataSource = self
         collectionView.delegate = self
         collectionView.bounces = false
+        collectionView.contentInsetAdjustmentBehavior = .never
         if #available(iOS 10, *) {
             collectionView.isPrefetchingEnabled = false
         }
@@ -135,31 +129,6 @@ public class PageContentView: UIView {
         addSubview(collectionView)
         collectionView.snp.makeConstraints { make in
             make.edges.equalToSuperview()
-        }
-    }
-    
-//    public override func layoutSubviews() {
-//        super.layoutSubviews()
-//        collectionView.frame = CGRect(origin: CGPoint.zero, size: frame.size)
-//        let layout = collectionView.collectionViewLayout as! CollectionViewPagingLayout
-//        layout.itemSize = frame.size
-//        layout.offset = CGFloat(currentIndex) * frame.size.width
-//        layout.invalidateLayout()
-//    }
-    
-    public func updateContentEdgeInsets() {
-        var isUpdate = false
-        childViewControllers.forEach {
-            if $0.view.superview != nil {
-                isUpdate = true
-                $0.view.snp.remakeConstraints { make in
-                    make.edges.equalToSuperview().inset(getContentEdgeInsets?() ?? .zero)
-                }
-            }
-        }
-        if isUpdate {
-            guard let layout = collectionView.collectionViewLayout as? CollectionViewPagingLayout else { return }
-            layout.setCurrentPage(currentIndex, animated: false)
         }
     }
 }
@@ -203,17 +172,9 @@ extension PageContentView: UICollectionViewDataSource {
         let childViewController = childViewControllers[indexPath.item]
 
         eventHandler = childViewController as? PageEventHandleable
-//        print("cell.contentView.frame.size:\(cell.contentView.frame.size)")
-//        childViewController.view.frame = CGRect(origin: CGPoint.zero, size: cell.contentView.frame.size)
-        
-        let containerView = UIView()
-        containerView.addSubview(childViewController.view)
+          
+        cell.contentView.addSubview(childViewController.view)
         childViewController.view.snp.remakeConstraints { make in
-            make.edges.equalToSuperview().inset(getContentEdgeInsets?() ?? .zero)
-        }
-            
-        cell.contentView.addSubview(containerView)
-        containerView.snp.makeConstraints { make in
             make.edges.equalToSuperview()
         }
         
@@ -247,9 +208,16 @@ extension PageContentView: UICollectionViewDelegate {
     }
     
     
+    private func pageIndex(for scrollView: UIScrollView) -> Int {
+        let pageWidth = scrollView.frame.width
+        guard pageWidth > 0 else { return currentIndex }
+        let normalizedOffset = scrollView.contentOffset.x + scrollView.contentInset.left
+        return Int(round(normalizedOffset / pageWidth))
+    }
+    
     private func collectionViewDidEndScroll(_ scrollView: UIScrollView) {
         
-        let index = Int(round(scrollView.contentOffset.x / scrollView.frame.width))
+        let index = pageIndex(for: scrollView)
         
         delegate?.contentView(self, didEndScrollAt: index)
         
@@ -278,11 +246,14 @@ extension PageContentView: UICollectionViewDelegate {
         var sourceIndex = 0
         
         
-        progress = scrollView.contentOffset.x.truncatingRemainder(dividingBy: scrollView.frame.width) / scrollView.frame.width
+        let pageWidth = scrollView.frame.width
+        guard pageWidth > 0 else { return }
+        let normalizedOffset = scrollView.contentOffset.x + scrollView.contentInset.left
+        progress = normalizedOffset.truncatingRemainder(dividingBy: pageWidth) / pageWidth
         if progress == 0 || progress.isNaN {
             return
         }
-        let index = Int(scrollView.contentOffset.x / scrollView.frame.width)
+        let index = Int(normalizedOffset / pageWidth)
         if collectionView.contentOffset.x > startOffsetX { // 左滑动
             sourceIndex = index
             targetIndex = index + 1
