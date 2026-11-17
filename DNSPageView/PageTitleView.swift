@@ -93,7 +93,9 @@ public class PageTitleView: UIView {
     private lazy var scrollView: UIScrollView = {
         let scrollView = UIScrollView()
         scrollView.showsHorizontalScrollIndicator = false
+        #if !os(tvOS)
         scrollView.scrollsToTop = false
+        #endif
         return scrollView
     }()
     

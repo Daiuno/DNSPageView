@@ -96,8 +96,10 @@ public class PageContentView: UIView {
     private (set) public lazy var collectionView: UICollectionView = {
         let collectionView = UICollectionView(frame: .zero, collectionViewLayout: CollectionViewPagingLayout())
         collectionView.showsHorizontalScrollIndicator = false
+        #if !os(tvOS)
         collectionView.isPagingEnabled = true
         collectionView.scrollsToTop = false
+        #endif
         collectionView.dataSource = self
         collectionView.delegate = self
         collectionView.bounces = false
